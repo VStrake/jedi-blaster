@@ -521,22 +521,153 @@ function drawPlayer() {
   } else {
     ctx.rotate(player.bank);
   }
+
+  /* ─── Engine plumes (drawn first so wings/body sit on top) ─── */
+  const ENGINES = [-13, -5, 5, 13];
+  for(let i=0;i<ENGINES.length;i++) {
+    const ex = ENGINES[i];
+    const flick = 0.82 + Math.random()*0.36;
+    const len = 28 * flick;
+    /* outer halo */
+    ctx.shadowColor='#00aaff'; ctx.shadowBlur=24;
+    const g = ctx.createLinearGradient(ex, 17, ex, 17+len);
+    g.addColorStop(0,    'rgba(255,255,255,0.95)');
+    g.addColorStop(0.18, 'rgba(170,238,255,0.85)');
+    g.addColorStop(0.55, 'rgba(0,170,255,0.5)');
+    g.addColorStop(1,    'rgba(0,40,120,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(ex, 17 + len*0.5, 4*flick, len*0.5, 0, 0, Math.PI*2);
+    ctx.fill();
+    /* hot inner core */
+    ctx.shadowBlur = 0;
+    ctx.fillStyle='#ffffff';
+    ctx.beginPath();
+    ctx.ellipse(ex, 19, 1.6*flick, 5.5*flick, 0, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.shadowBlur = 0;
+
+  /* ─── 4 S-foils in attack position (top-down view) ─── */
+  function drawSfoil(side, vert) {
+    const x0=side*3, y0=-1+vert*5;
+    const x1=side*28, y1=vert*13;
+    const dxv=x1-x0, dyv=y1-y0;
+    const dlen=Math.hypot(dxv,dyv);
+    const ux=dxv/dlen, uy=dyv/dlen;
+    const nx=-uy, ny=ux;
+    const rootW=4, tipW=2.2;
+    /* wing trapezoid */
+    ctx.beginPath();
+    ctx.moveTo(x0+nx*rootW, y0+ny*rootW);
+    ctx.lineTo(x1+nx*tipW,  y1+ny*tipW);
+    ctx.lineTo(x1-nx*tipW,  y1-ny*tipW);
+    ctx.lineTo(x0-nx*rootW, y0-ny*rootW);
+    ctx.closePath();
+    const wg = ctx.createLinearGradient(x0+nx*rootW, y0+ny*rootW, x0-nx*rootW, y0-ny*rootW);
+    wg.addColorStop(0,'#7d818b');
+    wg.addColorStop(0.45,'#dde2eb');
+    wg.addColorStop(0.7,'#eef1f6');
+    wg.addColorStop(1,'#9aa0aa');
+    ctx.fillStyle=wg; ctx.fill();
+    ctx.strokeStyle='#3a3a40'; ctx.lineWidth=0.7; ctx.stroke();
+    /* red Rebel stripe */
+    const sx0=x0+dxv*0.34, sy0=y0+dyv*0.34;
+    const sx1=x0+dxv*0.58, sy1=y0+dyv*0.58;
+    const sw=2.6;
+    ctx.fillStyle='#cc2424';
+    ctx.beginPath();
+    ctx.moveTo(sx0+nx*sw, sy0+ny*sw);
+    ctx.lineTo(sx1+nx*sw, sy1+ny*sw);
+    ctx.lineTo(sx1-nx*sw, sy1-ny*sw);
+    ctx.lineTo(sx0-nx*sw, sy0-ny*sw);
+    ctx.closePath(); ctx.fill();
+    /* small black square at root (S-foil hinge) */
+    ctx.fillStyle='#222';
+    ctx.fillRect(x0-1.5, y0-1.2, 3, 2.4);
+    /* wing-tip cannon — dark cylinder + green muzzle glow */
+    const cBaseX=x1+ux*1.5, cBaseY=y1+uy*1.5;
+    const cEndX =x1+ux*8,   cEndY =y1+uy*8;
+    ctx.strokeStyle='#1f1f24'; ctx.lineWidth=2.6; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(cBaseX,cBaseY); ctx.lineTo(cEndX,cEndY); ctx.stroke();
+    ctx.fillStyle='#3a3a40';
+    ctx.beginPath(); ctx.arc(x1, y1, 2.2, 0, Math.PI*2); ctx.fill();
+    /* charged tip */
+    ctx.fillStyle='#aaffaa';
+    ctx.shadowColor='#00ff44'; ctx.shadowBlur=6;
+    ctx.beginPath(); ctx.arc(cEndX, cEndY, 1.4, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur=0;
+  }
+  /* upper wings forward, lower wings back — opens the S-foils */
+  drawSfoil(-1, -1); drawSfoil(-1, 1);
+  drawSfoil( 1, -1); drawSfoil( 1, 1);
+
+  /* ─── Fuselage (tapered teardrop nose pointing up) ─── */
   ctx.beginPath();
-  ctx.moveTo(0,-PH/2); ctx.lineTo(-PW/2,PH/2); ctx.lineTo(PW/2,PH/2); ctx.closePath();
-  ctx.fillStyle='#99bbdd'; ctx.fill();
-  ctx.strokeStyle='#cce0ff'; ctx.lineWidth=1.5; ctx.stroke();
-  ctx.strokeStyle='#ff3333'; ctx.lineWidth=3.5; ctx.lineCap='round';
-  ctx.beginPath(); ctx.moveTo(-PW*0.27,PH*0.02); ctx.lineTo(-PW*0.49,PH*0.49); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo( PW*0.27,PH*0.02); ctx.lineTo( PW*0.49,PH*0.49); ctx.stroke();
-  const eg=ctx.createRadialGradient(0,PH*0.28,0,0,PH*0.28,14);
-  eg.addColorStop(0,'rgba(80,200,255,0.9)'); eg.addColorStop(1,'rgba(0,80,255,0)');
-  ctx.fillStyle=eg; ctx.beginPath(); ctx.arc(0,PH*0.28,14,0,Math.PI*2); ctx.fill();
-  ctx.shadowColor='#00aaff'; ctx.shadowBlur=18;
-  const ck=ctx.createRadialGradient(-3,-6,1,0,-4,12);
-  ck.addColorStop(0,'#ffffff'); ck.addColorStop(0.45,'#88ccff'); ck.addColorStop(1,'#002288');
-  ctx.beginPath(); ctx.ellipse(0,-4,12,9,0,0,Math.PI*2);
-  ctx.fillStyle=ck; ctx.fill();
+  ctx.moveTo(0,-22);
+  ctx.bezierCurveTo(3.2,-14, 5,-2, 4.5,12);
+  ctx.lineTo(-4.5,12);
+  ctx.bezierCurveTo(-5,-2, -3.2,-14, 0,-22);
+  ctx.closePath();
+  const fg = ctx.createLinearGradient(-5, 0, 5, 0);
+  fg.addColorStop(0, '#7d818b');
+  fg.addColorStop(0.3, '#d8dde6');
+  fg.addColorStop(0.65,'#eef1f6');
+  fg.addColorStop(1, '#7d818b');
+  ctx.fillStyle = fg; ctx.fill();
+  ctx.strokeStyle='#2a2a30'; ctx.lineWidth=0.8; ctx.stroke();
+
+  /* engine block at the back */
+  ctx.fillStyle='#3a3a44';
+  ctx.beginPath(); ctx.roundRect(-7.5, 12, 15, 7, 1.5); ctx.fill();
+  ctx.strokeStyle='#1a1a20'; ctx.lineWidth=0.8; ctx.stroke();
+  /* 4 nozzle dots */
+  for(const nx of [-5.2, -1.7, 1.7, 5.2]) {
+    ctx.fillStyle='#0a0a10';
+    ctx.beginPath(); ctx.arc(nx, 17.5, 1.6, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle='#88eeff';
+    ctx.shadowColor='#00aaff'; ctx.shadowBlur=6;
+    ctx.beginPath(); ctx.arc(nx, 17.5, 0.7, 0, Math.PI*2); ctx.fill();
+  }
   ctx.shadowBlur=0;
+
+  /* red Rebel hull stripes (Luke's Red 5) */
+  ctx.fillStyle='#c8252a';
+  ctx.fillRect(-3, -13, 6, 2.6);
+  ctx.fillRect(-3, -8, 6, 1.6);
+  ctx.fillRect(-3, 7, 6, 1.6);
+  /* small black panel detail */
+  ctx.fillStyle='#222';
+  ctx.fillRect(-2, 4, 4, 2.5);
+
+  /* cockpit canopy — tinted glass */
+  const cgrad = ctx.createRadialGradient(-1, -10, 0.4, 0, -9, 4.5);
+  cgrad.addColorStop(0, '#ddeeff');
+  cgrad.addColorStop(0.4, '#3a78cc');
+  cgrad.addColorStop(1, '#001a44');
+  ctx.shadowColor='#3399ff'; ctx.shadowBlur=10;
+  ctx.fillStyle = cgrad;
+  ctx.beginPath(); ctx.ellipse(0, -9, 3, 4.2, 0, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle='#001a30'; ctx.lineWidth=0.6; ctx.stroke();
+  ctx.shadowBlur = 0;
+  /* tiny highlight reflection */
+  ctx.fillStyle='rgba(255,255,255,0.55)';
+  ctx.beginPath(); ctx.ellipse(-1, -10.5, 1, 1.4, 0, 0, Math.PI*2); ctx.fill();
+
+  /* R2-D2 astromech socket dome behind the cockpit */
+  const r2g = ctx.createRadialGradient(-0.6, -2.2, 0.3, 0, -1.5, 2.6);
+  r2g.addColorStop(0, '#aac8ff');
+  r2g.addColorStop(0.5, '#3a6ec8');
+  r2g.addColorStop(1, '#001a44');
+  ctx.fillStyle = r2g;
+  ctx.beginPath(); ctx.arc(0, -1.5, 2.4, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle='#001a30'; ctx.lineWidth=0.5; ctx.stroke();
+  /* R2 red eye */
+  ctx.fillStyle='#ff3333';
+  ctx.shadowColor='#ff0000'; ctx.shadowBlur=4;
+  ctx.beginPath(); ctx.arc(0, -2, 0.7, 0, Math.PI*2); ctx.fill();
+  ctx.shadowBlur=0;
+
   ctx.restore();
 }
 
@@ -1857,16 +1988,26 @@ function drawAllies() {
 /* ── Engine trail (player ship thrust) ── */
 function emitEngineTrail() {
   if(state!==S.PLAY) return;
-  if(Math.random()<0.55) {
-    parts.push({
-      x: getPX()+(Math.random()-0.5)*10,
-      y: getPY()+PH*0.45,
-      vx:(Math.random()-0.5)*30,
-      vy: 90+Math.random()*40,
-      life: 0.55, decay: 1.4,
-      r: 2.2+Math.random()*2.5,
-      col: Math.random()<0.5?'#88ccff':'#aaeeff'
-    });
+  const px=getPX(), py=getPY();
+  const c = Math.cos(player.bank), s = Math.sin(player.bank);
+  /* 4 engine nozzles in local coords */
+  const NOZ = [-13, -5, 5, 13];
+  for(const lx of NOZ) {
+    if(Math.random() < 0.55) {
+      const ly = 21;  /* behind the engine block */
+      /* rotate local to world via banking angle */
+      const wx = lx*c - ly*s;
+      const wy = lx*s + ly*c;
+      parts.push({
+        x: px + wx + (Math.random()-0.5)*3.5,
+        y: py + wy + (Math.random()-0.5)*3.5,
+        vx: -s*70 + (Math.random()-0.5)*16,
+        vy:  c*100 + (Math.random()-0.5)*16,
+        life: 0.45+Math.random()*0.20, decay: 1.5,
+        r: 1.8+Math.random()*1.8,
+        col: Math.random()<0.35 ? '#ffffff' : (Math.random()<0.5?'#88eeff':'#aaeeff')
+      });
+    }
   }
 }
 
