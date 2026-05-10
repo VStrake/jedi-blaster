@@ -101,20 +101,45 @@ function noiseBurst(dur,vol,lpFreq) {
   g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+dur);
   src.start();
 }
-/* base PEW for player single bolt */
-function sndLaser()       { tone('sawtooth',900,220,0.09,0.10); }
+/* X-wing-style cannon — high snap + descending whine + breathy tail */
+function sndLaser() {
+  tone('square',2400,1100,0.04,0.10);
+  tone('sawtooth',1100,180,0.10,0.09,0.015);
+  noiseBurst(0.07,0.03,3200);
+}
 /* twin parallel — slightly chorused, higher tone */
-function sndLaserDouble() { tone('sawtooth',1100,260,0.09,0.08); tone('sawtooth',1080,240,0.09,0.06,0.012); }
+function sndLaserDouble() {
+  tone('square',2600,1300,0.04,0.09);
+  tone('sawtooth',1250,210,0.10,0.08,0.012);
+  tone('sawtooth',1230,200,0.10,0.06,0.022);
+  noiseBurst(0.07,0.03,3500);
+}
 /* spread — 3 quick chirps fanning */
-function sndLaserSpread() { tone('square',720,240,0.07,0.07); tone('square',900,260,0.07,0.07,0.04); tone('square',1100,300,0.07,0.07,0.08); }
+function sndLaserSpread() {
+  tone('square',900,300,0.07,0.07);
+  tone('square',1100,320,0.07,0.07,0.035);
+  tone('square',1300,360,0.07,0.07,0.07);
+}
 /* enemy plasma — bassy pulse */
 function sndPlasma()      { tone('square',300,160,0.18,0.16); tone('sine',600,200,0.20,0.10,0.05); }
 /* enemy missile — whoosh */
 function sndHoming()      { tone('triangle',520,260,0.20,0.12); noiseBurst(0.30,0.06,1200); }
-/* enemy bolt — short blip */
-function sndEnemyShot()   { tone('square',380,90,0.09,0.09); }
-/* enemy spread — staccato */
+/* Imperial blaster — punchier red */
+function sndEnemyShot() {
+  tone('square',520,140,0.06,0.08);
+  tone('sawtooth',900,180,0.08,0.07,0.015);
+  noiseBurst(0.06,0.02,2200);
+}
 function sndEnemySpread() { tone('square',420,120,0.06,0.07); tone('square',360,90,0.06,0.07,0.05); tone('square',300,80,0.07,0.07,0.10); }
+/* TIE Fighter passing scream — iconic ion-engine howl */
+function sndTieScream() {
+  if(!ac) return;
+  /* layered descending whine + breathy noise */
+  tone('sawtooth',1400,260,0.6,0.10);
+  tone('sawtooth',780,140,0.6,0.08,0.04);
+  tone('sawtooth',180,90,0.6,0.06,0.08);
+  noiseBurst(0.55,0.06,1600);
+}
 function sndLifeLost()    { tone('sawtooth',280,40,0.9,0.40); }
 function sndPowerUp()     { tone('triangle',440,900,0.12,0.30); tone('triangle',900,1500,0.14,0.25,0.10); }
 function sndFriendlyHit() { tone('sawtooth',240,80,0.5,0.38); }
@@ -321,6 +346,53 @@ function playMarchStep() {
   if(kick) musicKick();
   music.step++;
   music.timer = setTimeout(playMarchStep, dur * 1000);
+}
+
+/* ── Nebula clouds (volumetric atmosphere) ── */
+const nebulae=[];
+const NEBULA_PALETTES = [
+  /* per-level base hues */
+  [220, 260], [240, 280], [275, 310], [310, 350],
+  [350, 30],  [120, 160], [180, 200], [40, 70],
+  [285, 315], [350, 10],  [140, 170], [270, 300]
+];
+function initNebulae() {
+  nebulae.length = 0;
+  const palette = NEBULA_PALETTES[Math.min(level-1, NEBULA_PALETTES.length-1)];
+  for(let i=0;i<5;i++) {
+    nebulae.push({
+      x: Math.random(),
+      y: Math.random()*1.2 - 0.1,
+      r: 0.18 + Math.random()*0.25,
+      hue: palette[0] + Math.random()*(palette[1]-palette[0]),
+      spd: 0.0015 + Math.random()*0.004,
+      a: 0.10 + Math.random()*0.08,
+      drift: (Math.random()-0.5)*0.0008
+    });
+  }
+}
+function updateNebulae(dt) {
+  for(const n of nebulae) {
+    n.y += n.spd*dt;
+    n.x += n.drift*dt;
+    if(n.y > 1.3) { n.y = -0.25; n.x = Math.random(); }
+  }
+}
+function drawNebulae() {
+  const W=canvas.width, H=canvas.height;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for(const n of nebulae) {
+    const cx=n.x*W, cy=n.y*H;
+    const r=n.r*Math.min(W,H);
+    const grad=ctx.createRadialGradient(cx,cy,0, cx,cy,r);
+    grad.addColorStop(0, `hsla(${n.hue}, 80%, 60%, ${n.a*1.2})`);
+    grad.addColorStop(0.4, `hsla(${(n.hue+25)%360}, 70%, 45%, ${n.a*0.7})`);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle=grad;
+    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
 }
 
 /* ── Stars (3-layer parallax) ── */
@@ -855,8 +927,11 @@ function spawnEnemy() {
       wph: Math.random()*Math.PI*2, wt:0,
       sht: 0.6+Math.random()*d.shi,
       shi: d.shi * shiMult,
-      hp: kind==='shuttle'?3 : kind==='bomber'?2 : 1
+      hp: kind==='shuttle'?3 : kind==='bomber'?2 : 1,
+      scale: 0.42 /* starts small (far) — grows as it descends */
     });
+    /* iconic TIE scream when fast/elite ships appear (sparingly) */
+    if((kind==='interceptor'||kind==='elite') && Math.random()<0.4) sndTieScream();
   }
 }
 /* Tiny stormtrooper helmet drawn in a ship cockpit */
@@ -891,6 +966,8 @@ function drawStormtrooper(scale) {
 }
 function drawTIE(e) {
   ctx.save(); ctx.translate(e.x,e.y);
+  const s = e.scale || 1;
+  ctx.scale(s, s);
   const CR=20, WW=30, WH=50, RL=21;
   let bodyCol='#3a5570', strokeCol='#7ab0cc', gridCol='#99c0d8';
   let eyeStops=['#ff9966','#ff4400','#880000'];
@@ -935,6 +1012,9 @@ function updateEnemies(dt) {
     e.y += e.spd*dt;
     e.wt += dt;
     e.x = e.bx + Math.sin(e.wt*e.wfreq*Math.PI*2+e.wph)*e.wamp;
+    /* 3D perspective scale: small at top, full size by mid-screen */
+    const f = Math.max(0, Math.min(1, (e.y + 60) / (H*0.55)));
+    e.scale = 0.42 + f*0.58;
     e.sht -= dt;
     if(e.sht<=0) {
       let type='bolt';
@@ -957,6 +1037,7 @@ function updateEnemies(dt) {
 }
 function drawInterceptor(e) {
   ctx.save(); ctx.translate(e.x,e.y);
+  const s = e.scale || 1; ctx.scale(s, s);
   /* TIE Interceptor — angled dagger wings */
   ctx.fillStyle='#3a4870'; ctx.strokeStyle='#88aacc'; ctx.lineWidth=1.5;
   /* left wing (dagger) */
@@ -993,6 +1074,7 @@ function drawInterceptor(e) {
 }
 function drawBomber(e) {
   ctx.save(); ctx.translate(e.x,e.y);
+  const s = e.scale || 1; ctx.scale(s, s);
   /* TIE Bomber — twin pods side by side */
   ctx.fillStyle='#3a5570'; ctx.strokeStyle='#7ab0cc'; ctx.lineWidth=1.5;
   /* wings */
@@ -1025,6 +1107,7 @@ function drawBomber(e) {
 }
 function drawShuttle(e) {
   ctx.save(); ctx.translate(e.x,e.y);
+  const s = e.scale || 1; ctx.scale(s, s);
   /* Imperial Shuttle — triangular with wings folded */
   ctx.fillStyle='#1a1f28'; ctx.strokeStyle='#88aacc'; ctx.lineWidth=2;
   /* main body */
@@ -1856,27 +1939,75 @@ function updateFriendlies(dt) {
   }
 }
 function drawFriendly(f) {
+  /* R2-D2 inspired astromech droid */
   ctx.save(); ctx.translate(f.x,f.y);
-  ctx.shadowColor='#00ffff'; ctx.shadowBlur=18;
-  ctx.fillStyle='#88ddff';
-  ctx.beginPath(); ctx.arc(0,5,16,0,Math.PI*2); ctx.fill();
+  ctx.rotate(Math.sin(f.wob*1.6)*0.07);
+  /* outer halo */
+  ctx.shadowColor='#88ccff'; ctx.shadowBlur=14;
+  /* white cylindrical body */
+  ctx.fillStyle='#e6ecf2';
+  ctx.fillRect(-12,-3,24,22);
+  ctx.strokeStyle='#9aa6b4'; ctx.lineWidth=1; ctx.strokeRect(-12,-3,24,22);
+  /* body shading (cylinder feel) */
+  const bg=ctx.createLinearGradient(-12,0,12,0);
+  bg.addColorStop(0,'rgba(0,0,0,0.32)');
+  bg.addColorStop(0.5,'rgba(255,255,255,0)');
+  bg.addColorStop(1,'rgba(0,0,0,0.32)');
+  ctx.fillStyle=bg; ctx.fillRect(-12,-3,24,22);
   ctx.shadowBlur=0;
-  ctx.fillStyle='#aaeeff';
-  ctx.beginPath(); ctx.arc(0,-5,12,Math.PI,Math.PI*2); ctx.closePath(); ctx.fill();
-  ctx.fillStyle='#4488bb'; ctx.fillRect(-12,-6,24,2);
-  const blink = ((f.blink%2.4)>2.2)?0.2:1;
-  ctx.fillStyle=`rgba(0,80,40,${blink})`;
-  ctx.beginPath(); ctx.arc(0,-9,4.5,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle=`rgba(255,255,255,${blink})`;
-  ctx.beginPath(); ctx.arc(-1.5,-10.5,1.7,0,Math.PI*2); ctx.fill();
-  ctx.strokeStyle='#003355'; ctx.lineWidth=2; ctx.lineCap='round';
-  ctx.beginPath(); ctx.arc(0,7,6.5,0.25,Math.PI-0.25); ctx.stroke();
-  ctx.strokeStyle='#aaeeff'; ctx.lineWidth=2;
-  ctx.beginPath(); ctx.moveTo(0,-17); ctx.lineTo(0,-25); ctx.stroke();
-  ctx.fillStyle='#ffff44';
-  ctx.shadowColor='#ffff66'; ctx.shadowBlur=8;
-  ctx.beginPath(); ctx.arc(0,-27,3,0,Math.PI*2); ctx.fill();
+  /* body panel lines */
+  ctx.strokeStyle='#566c80'; ctx.lineWidth=0.9;
+  ctx.beginPath(); ctx.moveTo(-12,4); ctx.lineTo(12,4); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-12,12); ctx.lineTo(12,12); ctx.stroke();
+  /* utility ports */
+  ctx.fillStyle='#3a4a6a'; ctx.fillRect(-9,6,4,4);
+  ctx.fillStyle='#5a3a3a'; ctx.fillRect(5,6,4,4);
+  /* center red rectangle */
+  ctx.fillStyle='#cc3322'; ctx.fillRect(-2,14,4,3);
+  /* blue dome */
+  ctx.shadowColor='#4499ff'; ctx.shadowBlur=12;
+  ctx.fillStyle='#4d8fcf';
+  ctx.beginPath(); ctx.arc(0,-3,12,Math.PI,Math.PI*2); ctx.closePath(); ctx.fill();
   ctx.shadowBlur=0;
+  /* dome shading */
+  const dg=ctx.createRadialGradient(-3,-7,1, 0,-3,14);
+  dg.addColorStop(0,'rgba(255,255,255,0.55)');
+  dg.addColorStop(0.5,'rgba(255,255,255,0.08)');
+  dg.addColorStop(1,'rgba(0,0,0,0.42)');
+  ctx.fillStyle=dg;
+  ctx.beginPath(); ctx.arc(0,-3,12,Math.PI,Math.PI*2); ctx.closePath(); ctx.fill();
+  /* dome rim */
+  ctx.strokeStyle='#2c5680'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(0,-3,12,Math.PI,Math.PI*2); ctx.stroke();
+  /* main photoreceptor (eye) */
+  ctx.fillStyle='#0a0a10';
+  ctx.beginPath(); ctx.arc(0,-6,4,0,Math.PI*2); ctx.fill();
+  /* eye lens */
+  const blink=((f.blink%3.0)>2.85)?0.2:1;
+  ctx.fillStyle=`rgba(80,200,255,${blink*0.85})`;
+  ctx.beginPath(); ctx.arc(0,-6,3,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=`rgba(255,255,255,${blink*0.95})`;
+  ctx.beginPath(); ctx.arc(-1,-7,1.2,0,Math.PI*2); ctx.fill();
+  /* dome side lights */
+  ctx.fillStyle='#0066cc';
+  ctx.shadowColor='#0066cc'; ctx.shadowBlur=6;
+  ctx.beginPath(); ctx.arc(-7,-7,1.2,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#ff3333';
+  ctx.shadowColor='#ff3333';
+  ctx.beginPath(); ctx.arc(7,-7,1.2,0,Math.PI*2); ctx.fill();
+  ctx.shadowBlur=0;
+  /* legs */
+  ctx.fillStyle='#bbc4ce';
+  ctx.fillRect(-15,16,5,7);
+  ctx.fillRect(10,16,5,7);
+  ctx.fillStyle='#445566';
+  ctx.fillRect(-14,21,3,2);
+  ctx.fillRect(11,21,3,2);
+  /* center foot */
+  ctx.fillStyle='#aab2bd';
+  ctx.fillRect(-3,18,6,5);
+  ctx.fillStyle='#445566';
+  ctx.fillRect(-2,21,4,1.5);
   ctx.restore();
 }
 function drawFriendlies() { for(const f of friendlies) drawFriendly(f); }
@@ -2706,6 +2837,7 @@ function checkLevelUp() {
     levelBanner=1.8;
     hyperspaceT = 0.85;
     bannerQuote = (level%3!==0) ? YODA_QUOTES[Math.floor(Math.random()*YODA_QUOTES.length)] : '';
+    initNebulae();
     sndHyperspace();
     sndLevelUp();
     if(level%3===0 && !boss.active && bossSpawnT<0) {
@@ -2903,6 +3035,7 @@ function startGame() {
   bombs.length=0; lightnings.length=0; comets.length=0; cometT=10;
   beams.length=0; allies.length=0;
   paused=false;
+  initNebulae();
   saber.cd=0; saber.anim=0; saber.flash=0; saber.victims.length=0;
   spawnT=1.2; friendT=5.5; asteroidT=5;
   combo=0; comboT=0; bossSpawnT=-1; slowmoT=0;
@@ -2997,7 +3130,7 @@ function loop(ts) {
     /* freeze update; redraw current frame so pause is visible */
     const [sx,sy]=shakeOffset();
     ctx.save(); ctx.translate(sx,sy);
-    drawBg(); drawStars(); drawWaves();
+    drawBg(); drawNebulae(); drawStars(); drawWaves();
     drawPLasers(); drawELasers(); drawBeams(); drawEnemies();
     drawAsteroids(); drawBombs(); drawComets();
     drawFriendlies(); drawPowerUps();
@@ -3014,6 +3147,7 @@ function loop(ts) {
   }
 
   updateStars(dt);
+  updateNebulae(dt);
   const dxBefore = player.tx - player.x;
   player.x += (player.tx-player.x)*Math.min(1,dt*20);
   player.y += (player.ty-player.y)*Math.min(1,dt*16);
@@ -3072,7 +3206,7 @@ function loop(ts) {
   const [sx,sy]=shakeOffset();
   ctx.save();
   ctx.translate(sx,sy);
-  drawBg(); drawStars();
+  drawBg(); drawNebulae(); drawStars();
   if(boss.active) drawDeathStar();
   drawWaves();
   drawPLasers(); drawELasers(); drawBeams(); drawEnemies();
