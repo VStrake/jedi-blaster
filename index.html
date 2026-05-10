@@ -1164,9 +1164,16 @@ function updateEnemies(dt) {
   const H=canvas.height;
   for(let i=enemies.length-1;i>=0;i--) {
     const e=enemies[i];
+    if(e.lastX===undefined) e.lastX=e.x;
+    const prevX = e.x;
     e.y += e.spd*dt;
     e.wt += dt;
     e.x = e.bx + Math.sin(e.wt*e.wfreq*Math.PI*2+e.wph)*e.wamp;
+    /* smooth bank from horizontal velocity */
+    const dx = e.x - prevX;
+    const targetBank = Math.max(-0.45, Math.min(0.45, dx*0.6));
+    e.bank = (e.bank||0) + (targetBank - (e.bank||0)) * Math.min(1, dt*8);
+    e.lastX = e.x;
     /* 3D perspective scale: small at top, full size by mid-screen */
     const f = Math.max(0, Math.min(1, (e.y + 60) / (H*0.55)));
     e.scale = 0.42 + f*0.58;
@@ -2440,8 +2447,10 @@ function damageBoss(amt) {
     setTimeout(()=>{ if(state===S.PLAY) bigExplode(boss.x+40, boss.y-30); }, 130);
     setTimeout(()=>{ if(state===S.PLAY) bigExplode(boss.x-40, boss.y+25); }, 260);
     setTimeout(()=>{ if(state===S.PLAY) { bigExplode(boss.x, boss.y); boss.active=false; startMusic('ambient'); } }, 380);
-    score += 500 + boss.tier*250;
-    addPopup(boss.x, boss.y-30, '+'+(500+boss.tier*250)+' '+BOSS_NAME[boss.kind]+'!', '#ff3300');
+    /* Modest score reward — bigger reward is the popup + power-ups, not score skipping levels */
+    const bossPts = 75 + boss.tier*30;
+    score += bossPts;
+    addPopup(boss.x, boss.y-30, '+'+bossPts+' '+BOSS_NAME[boss.kind]+' DEFEATED!', '#ff3300');
     powerUps.push({x:boss.x-30, y:boss.y, type:'life',   vy:80, wob:0, rot:0});
     powerUps.push({x:boss.x+30, y:boss.y, type:'shield', vy:80, wob:0, rot:0});
     powerUps.push({x:boss.x,    y:boss.y-30, type: boss.kind==='emperor'?'lightning':boss.kind==='boba'?'bomb':'spread', vy:80, wob:0, rot:0});
@@ -3110,17 +3119,17 @@ function jediRank(s) {
 function checkLevelUp() {
   const target = Math.floor(score/100)+1;
   if(target>level) {
-    /* Award completion bonus for the level we just finished */
     const completedLv = level;
-    const completionBonus = 25 + completedLv*15;
+    /* Tiny FIXED bonus — must stay <100 so it can't trigger another level-up */
+    const completionBonus = 25;
     score += completionBonus;
     addPopup(canvas.width/2, canvas.height*0.42, '+'+completionBonus+' LEVEL '+completedLv+' BONUS!', '#00ff66');
-    /* refresh saber + heal a bit on milestone levels */
     if(completedLv % 3 === 2) {
       saber.cd = 0;
       addPopup(canvas.width/2, canvas.height*0.46, 'SABER REFRESHED', '#aaffcc');
     }
-    level=target;
+    /* Step level up by ONE only — even if score jumped past several thresholds (e.g. boss kill) */
+    level = level + 1;
     levelBanner=2.2;
     hyperspaceT = 0.85;
     bannerQuote = (level%3!==0) ? YODA_QUOTES[Math.floor(Math.random()*YODA_QUOTES.length)] : '';
