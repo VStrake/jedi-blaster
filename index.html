@@ -429,10 +429,10 @@ function updateStars(dt){
 }
 function drawStars(){
   const W=canvas.width,H=canvas.height;
-  if(hyperspaceT > 0) {
+  if(hyperspaceT > 0 || bonus.active) {
     /* hyperspace streaks — stars stretch toward edges */
     const cx=W/2, cy=H/2;
-    const intensity = Math.sin((1 - hyperspaceT/0.85) * Math.PI);
+    const intensity = bonus.active ? 0.95 : Math.sin((1 - hyperspaceT/0.85) * Math.PI);
     ctx.lineCap='round';
     for(const s of stars) {
       const sx=s.x*W, sy=s.y*H;
@@ -1668,6 +1668,112 @@ function drawPowerUps() {
   ctx.restore();
 }
 
+/* ── Hyperspace BONUS ROUND ── */
+const bonus = { active:false, time:0, duration:9, crystals:[], spawnT:0 };
+function startBonusRound() {
+  bonus.active = true;
+  bonus.time = bonus.duration;
+  bonus.crystals = [];
+  bonus.spawnT = 0;
+  /* clear threats — make it pure fun */
+  enemies.length = 0;
+  eLasers.length = 0;
+  beams.length = 0;
+  asteroids.length = 0;
+  comets.length = 0;
+  bombs.length = 0;
+  addShake(8);
+  addPopup(canvas.width/2, canvas.height*0.32, '★ BONUS HYPERSPACE ★', '#ffee00');
+  addPopup(canvas.width/2, canvas.height*0.32+44, 'Grab the kyber crystals!', '#aaffcc');
+  sndHyperspace();
+  sndLevelUp();
+}
+function spawnCrystal() {
+  const W=canvas.width, H=canvas.height;
+  bonus.crystals.push({
+    x: W+30, y: 70 + Math.random()*(H-200),
+    vx: -(420+Math.random()*220),
+    vy: (Math.random()-0.5)*45,
+    rot: Math.random()*Math.PI*2,
+    spinSpd: 3+Math.random()*2.5,
+    hue: 40+Math.random()*70,
+    size: 13+Math.random()*5,
+    pulse: 0
+  });
+}
+function updateBonus(dt) {
+  if(!bonus.active) return;
+  bonus.time -= dt;
+  bonus.spawnT -= dt;
+  if(bonus.spawnT <= 0) { spawnCrystal(); bonus.spawnT = 0.18 + Math.random()*0.12; }
+  const px=getPX(), py=getPY();
+  for(let i=bonus.crystals.length-1;i>=0;i--) {
+    const c=bonus.crystals[i];
+    c.x += c.vx*dt; c.y += c.vy*dt;
+    c.rot += c.spinSpd*dt; c.pulse += dt*6;
+    if(c.x<-50) { bonus.crystals.splice(i,1); continue; }
+    if(Math.hypot(c.x-px, c.y-py) < 34) {
+      bonus.crystals.splice(i,1);
+      score += 25;
+      addPopup(c.x, c.y, '+25 ✨', '#ffee00');
+      sparkles(c.x, c.y, '#ffee00');
+      sndPowerUp();
+    }
+  }
+  if(bonus.time <= 0) {
+    bonus.active = false;
+    bonus.crystals.length = 0;
+    addPopup(canvas.width/2, canvas.height*0.32, 'WELL DONE!', '#88ff88');
+  }
+}
+function drawCrystals() {
+  if(!bonus.active && bonus.crystals.length===0) return;
+  ctx.save();
+  for(const c of bonus.crystals) {
+    ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.rot);
+    const pulse = 0.7 + Math.sin(c.pulse)*0.3;
+    ctx.shadowColor = `hsl(${c.hue},95%,60%)`;
+    ctx.shadowBlur = 18 + pulse*12;
+    const grad=ctx.createLinearGradient(0,-c.size, 0,c.size);
+    grad.addColorStop(0,`hsl(${c.hue},90%,82%)`);
+    grad.addColorStop(0.5,`hsl(${c.hue},95%,58%)`);
+    grad.addColorStop(1,`hsl(${(c.hue+30)%360},90%,32%)`);
+    ctx.fillStyle=grad;
+    ctx.beginPath();
+    ctx.moveTo(0,-c.size);
+    ctx.lineTo(c.size*0.7, 0);
+    ctx.lineTo(0, c.size);
+    ctx.lineTo(-c.size*0.7, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle='#ffffff'; ctx.lineWidth=1.5; ctx.stroke();
+    /* facets / inner shine */
+    ctx.fillStyle='rgba(255,255,255,0.65)';
+    ctx.beginPath();
+    ctx.moveTo(0,-c.size*0.7);
+    ctx.lineTo(c.size*0.3,-c.size*0.2);
+    ctx.lineTo(-c.size*0.3,-c.size*0.2);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+function drawBonusHud() {
+  if(!bonus.active) return;
+  const W=canvas.width;
+  ctx.save();
+  ctx.textAlign='center';
+  ctx.font='bold 32px "Arial Black",Arial,sans-serif';
+  ctx.fillStyle='#ffee00';
+  ctx.shadowColor='#ff8800'; ctx.shadowBlur=20;
+  ctx.fillText('★ BONUS HYPERSPACE ★', W/2, 110);
+  ctx.font='bold 22px Arial';
+  ctx.fillStyle='#aaffcc';
+  ctx.fillText(bonus.time.toFixed(1)+'s', W/2, 140);
+  ctx.shadowBlur=0;
+  ctx.restore();
+}
+
 /* ── Wingman allies ── */
 const allies=[];
 function spawnAlly() {
@@ -2842,6 +2948,9 @@ function checkLevelUp() {
     sndLevelUp();
     if(level%3===0 && !boss.active && bossSpawnT<0) {
       bossSpawnT = 1.4;
+    } else if(level%5===0 && !boss.active && !bonus.active) {
+      /* hyperspace bonus round at level 5, 10, 20... (skips levels that are also bosses like 15) */
+      setTimeout(()=>{ if(state===S.PLAY && !boss.active) startBonusRound(); }, 1200);
     }
   }
 }
@@ -3034,6 +3143,7 @@ function startGame() {
   powerUps.length=0; friendlies.length=0; asteroids.length=0;
   bombs.length=0; lightnings.length=0; comets.length=0; cometT=10;
   beams.length=0; allies.length=0;
+  bonus.active=false; bonus.crystals.length=0; bonus.time=0;
   paused=false;
   initNebulae();
   saber.cd=0; saber.anim=0; saber.flash=0; saber.victims.length=0;
@@ -3170,7 +3280,7 @@ function loop(ts) {
   player.fireT-=dt;
   if(player.fireT<=0){ firePlayer(); player.fireT=interval; }
 
-  if(!boss.active) {
+  if(!boss.active && !bonus.active) {
     spawnT-=dt;
     if(spawnT<=0){ spawnEnemy(); spawnT=getDiff().si; }
     asteroidT-=dt;
@@ -3178,10 +3288,12 @@ function loop(ts) {
   } else {
     spawnT=0.5; asteroidT=1.5;
   }
-  friendT-=dt;
-  if(friendT<=0){ spawnFriendly(); friendT=8+Math.random()*7; }
-  cometT-=dt;
-  if(cometT<=0){ spawnComet(); cometT=getCometInterval()*(0.6+Math.random()*0.8); }
+  if(!bonus.active) {
+    friendT-=dt;
+    if(friendT<=0){ spawnFriendly(); friendT=8+Math.random()*7; }
+    cometT-=dt;
+    if(cometT<=0){ spawnComet(); cometT=getCometInterval()*(0.6+Math.random()*0.8); }
+  }
 
   if(bossSpawnT>0) {
     bossSpawnT -= dt;
@@ -3193,6 +3305,7 @@ function loop(ts) {
   updatePowerUps(dt); updateFriendlies(dt); updateAsteroids(dt);
   updateBombs(dt); updateLightning(dt); updateComets(dt); updateBeams(dt);
   updateAllies(dt); emitEngineTrail();
+  updateBonus(dt);
   updateBoss(dt);
   checkHits();
   checkLevelUp();
@@ -3214,12 +3327,13 @@ function loop(ts) {
   drawComets();
   drawFriendlies(); drawPowerUps();
   drawAllies();
+  drawCrystals();
   drawBoss();
   drawSaberArc(); drawPlayer(); drawLightning(); drawParts();
   drawPopups();
   ctx.restore();
 
-  drawHUD(); drawBossHud(); drawSaberBtn(); drawPauseBtn();
+  drawHUD(); drawBossHud(); drawBonusHud(); drawSaberBtn(); drawPauseBtn();
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(function(ts){lastT=ts;requestAnimationFrame(loop);});
